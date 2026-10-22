@@ -67,6 +67,9 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Zero(t, cfg.DatabaseMaxConnIdleTime)
 	assert.Equal(t, time.Duration(0), cfg.AlertRetention)
 	assert.Equal(t, DefaultMonitorSilentAfter, cfg.MonitorSilentAfter)
+	assert.Equal(t, DefaultFlappingEpisodes, cfg.FlappingEpisodes)
+	assert.Equal(t, DefaultFlappingWindow, cfg.FlappingWindow)
+	assert.Equal(t, DefaultFlappingQuietAfter, cfg.FlappingQuietAfter)
 	assert.Nil(t, cfg.ConfigEncryptionKey)
 	assert.Empty(t, cfg.APITokens)
 	// Tracing defaults to entirely off.
@@ -183,6 +186,40 @@ func TestLoadRejectsInvalidMonitorSilentAfter(t *testing.T) {
 
 	_, err := Load()
 	assert.ErrorContains(t, err, "MONITOR_SILENT_AFTER")
+}
+
+func TestLoadFlappingSettings(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("FLAPPING_EPISODES", "5")
+	t.Setenv("FLAPPING_WINDOW", "20m")
+	t.Setenv("FLAPPING_QUIET_AFTER", "3m")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, 5, cfg.FlappingEpisodes)
+	assert.Equal(t, 20*time.Minute, cfg.FlappingWindow)
+	assert.Equal(t, 3*time.Minute, cfg.FlappingQuietAfter)
+}
+
+func TestLoadRejectsInvalidFlappingSettings(t *testing.T) {
+	for _, tc := range []struct {
+		key   string
+		value string
+	}{
+		{key: "FLAPPING_EPISODES", value: "0"},
+		{key: "FLAPPING_WINDOW", value: "nope"},
+		{key: "FLAPPING_QUIET_AFTER", value: "0s"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			t.Setenv("DATABASE_URL", "postgres://x")
+			t.Setenv("FLAPPING_EPISODES", "")
+			t.Setenv("FLAPPING_WINDOW", "")
+			t.Setenv("FLAPPING_QUIET_AFTER", "")
+			t.Setenv(tc.key, tc.value)
+			_, err := Load()
+			assert.ErrorContains(t, err, tc.key)
+		})
+	}
 }
 
 func TestLoadReadyzLagThreshold(t *testing.T) {
